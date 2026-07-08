@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>이화여자고등학교 안내 웹앱</title>
+    <style>
+        /* --- 기본 초기화 및 공통 스타일 --- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+
+        /* [요청 사항] 이화 로고가 있는 투명한 상단 바 + 옆에 목적지 선택창 배치 */
+        .top-bar {
+            position: fixed; 
+            top: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(255, 255, 255, 0.85); 
+            z-index: 1000; 
+            padding: 10px 20px; 
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            backdrop-filter: blur(5px); /* 은은한 투명 효과 */
+        }
+
+        .logo-link {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .logo-img {
+            height: 40px; 
+            width: auto;
+            object-fit: contain; 
+        }
+
+        /* 상단 바로 이동된 컴팩트 검색 바 */
+        .search-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .search-bar label {
+            font-weight: bold;
+            color: #1b5e20;
+            font-size: 14px;
+        }
+
+        .search-bar select {
+            padding: 8px 12px;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            min-width: 150px;
+            cursor: pointer;
+            outline: none;
+            background-color: white;
+        }
+        .search-bar select:focus { border-color: #00643E; }
+
+        .search-btn {
+            background-color: #00643E;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .search-btn:hover { background-color: #004d30; }
+
+        /* --- 메인 홈 화면 스타일 --- */
+        #home-view {
+            padding-top: 80px; /* 상단 바 공간 확보 */
+        }
+
+        /* 16:9 슬라이더 컨테이너 */
+        .slider-container {
+            position: relative;
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto; 
+            aspect-ratio: 16 / 9; 
+            overflow: hidden;
+            background-color: #000;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .slider-wrapper {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.5s ease-in-out; 
+        }
+
+        .slide {
+            flex: 0 0 100%; 
+            width: 100%;
+            height: 100%;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .slide img, 
+        .slide video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .slider-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: transparent;
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            font-size: 18px;
+            z-index: 10;
+            transition: all 0.3s;
+        }
+        .slider-btn:hover { background-color: rgba(255, 255, 255, 0.2); border-color: white; }
+        .left-btn { left: 20px; }
+        .right-btn { right: 20px; }
+
+        /* 자막 애니메이션 */
+        .intro-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+            text-shadow: 2px 2px 5px rgba(0,0,0,0.8);
+            width: 100%;
+            pointer-events: none; 
+        }
+
+        .text-ko { font-size: 28px; font-weight: 600; letter-spacing: 2px; margin-bottom: 5px; opacity: 0; }
+        .text-en { font-size: 32px; font-weight: 300; font-family: 'Times New Roman', serif; letter-spacing: 1px; opacity: 0; }
+
+        @keyframes slideUp {
+            0% { opacity: 0; transform: translateY(30px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+        .intro-text.animate .text-ko { animation: slideUp 0.8s ease forwards; animation-delay: 0.2s; }
+        .intro-text.animate .text-en { animation: slideUp 0.8s ease forwards; animation-delay: 0.6s; }
+
+        /* [요청 사항] 사진 세로 길이의 정확한 2/3 여백 컴포넌트 */
+        .slider-gap {
+            /* 16:9 비율의 높이는 너비의 56.25% 이며, 이 높이의 2/3는 전체 너비의 정확히 37.5% 입니다 */
+            height: calc(min(100vw, 1000px) * 0.375); 
+            width: 100%;
+        }
+
+        /* [요청 사항] 여백 밑에는 오직 지도만 깔끔하게 배치 */
+        .map-section {
+            text-align: center;
+            padding: 0 20px 80px 20px;
+        }
+
+        .image-container {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+            max-width: 900px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            border-radius: 10px;
+            overflow: hidden;
+            background-color: #fff;
+        }
+
+        .image-container img { width: 100%; display: block; }
+        
+        #route-canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* 지도 핀 스타일 */
+        .map-pin {
+            position: absolute;
+            background-color: rgba(46, 204, 113, 0.4);
+            border: 2px solid #27ae60;
+            border-radius: 50%;
+            cursor: pointer;
+            transform: translate(-50%, -50%);
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+        .map-pin:hover {
+            background-color: rgba(46, 204, 113, 0.8);
+            transform: translate(-50%, -50%) scale(1.2);
+        }
+
+        /* --- 장소 상세 설명 화면 스타일 --- */
+        #detail-view {
+            display: none;
+            padding: 100px 20px 40px 20px;
+            text-align: center;
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            min-height: 100vh;
+            box-shadow: 0 0 20px rgba(0,0,0,0.05);
+        }
+
+        #detail-title { color: #1b5e20; font-size: 24px; margin-bottom: 20px; }
+        .detail-img {
+            width: 100%; max-width: 500px; height: auto;
+            border-radius: 8px; margin: 0 auto 20px auto;
+            display: block; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .img-flex-container {
+            display: flex; gap: 10px; justify-content: center;
+            max-width: 500px; margin: 0 auto 20px auto;
+        }
+        .img-flex-container .detail-img { flex: 1; width: 50%; margin-bottom: 0; }
+
+        #detail-desc {
+            font-size: 15px; line-height: 1.8; margin-bottom: 40px;
+            color: #444; text-align: left; display: inline-block; word-break: keep-all;
+        }
+
+        .floor-plan {
+            background-color: #f9f9f9; padding: 15px 20px; border-radius: 8px;
+            margin-top: 15px; border: 1px solid #ddd; font-size: 14px; line-height: 1.6;
+        }
+
+        .back-btn {
+            background-color: #1b5e20; color: white; border: none;
+            padding: 12px 30px; font-size: 15px; border-radius: 25px;
+            cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: block; margin: 0 auto; transition: background 0.2s;
+        }
+        .back-btn:hover { background-color: #144d18; }
+
+        /* 모바일 최적화 대응 반응형 디자인 */
+        @media (max-width: 768px) {
+            .top-bar { position: relative; display: block; text-align: center; background-color: #fff; }
+            .logo-link { justify-content: center; margin-bottom: 10px; }
+            .search-bar { justify-content: center; }
+            #home-view { padding-top: 10px; }
+            #detail-view { padding-top: 30px; }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="top-bar">
+        <a onclick="showHome(true)" class="logo-link">
+            <img src="logo.png" alt="이화여고 로고" class="logo-img">
+        </a>
+        
+        <div class="search-bar">
+            <label for="start-select">출발</label>
+            <select id="start-select">
+                <option value="">-- 출발지 선택 --</option>
+                <option value="p1">이화 박물관(심슨 기념관)</option>
+                <option value="p2">이화 백주년기념관</option>
+                <option value="p3">본관(화암신봉조관)</option>
+                <option value="p4">유관순 우물터</option>
+                <option value="p5">노천극장</option>
+                <option value="p6">유관순 기념관</option>
+                <option value="p7">체육관(백상규 기념관)</option>
+                <option value="p8">이화교회</option>
+                <option value="p9">이화학사 김점동관(기숙사)</option>
+                <option value="p10">대운동장</option>
+                <option value="p11">도서관(전인항 기념 도서관)</option>
+            </select>
+
+            <label for="end-select">도착</label>
+            <select id="end-select">
+                <option value="">-- 도착지 선택 --</option>
+                <option value="p1">이화 박물관(심슨 기념관)</option>
+                <option value="p2">이화 백주년기념관</option>
+                <option value="p3">본관(화암신봉조관)</option>
+                <option value="p4">유관순 우물터</option>
+                <option value="p5">노천극장</option>
+                <option value="p6">유관순 기념관</option>
+                <option value="p7">체육관(백상규 기념관)</option>
+                <option value="p8">이화교회</option>
+                <option value="p9">이화학사 김점동관(기숙사)</option>
+                <option value="p10">대운동장</option>
+                <option value="p11">도서관(전인항 기념 도서관)</option>
+            </select>
+
+            <button class="search-btn" onclick="drawPoints()">찾아보기</button>
+        </div>
+    </header>
+
+    <div id="home-view">
+        <section class="slider-container">
+            <button class="slider-btn left-btn" onclick="moveSlide(-1, event)">&#10094;</button>
+            <div class="slider-wrapper" id="sliderWrapper">
+                <div class="slide">
+                    <img src="IMG_2158.jpg" alt="체육관 학생들">
+                    <div class="intro-text animate" id="introText">
+                        <div class="text-ko">이화여자고등학교</div>
+                        <div class="text-en">EWHA HIGH SCHOOL</div>
+                    </div>
+                </div>
+                <div class="slide"><img src="IMG_2162.jpeg" alt="손을 모은 학생들"></div>
+                <div class="slide"><img src="IMG_2163 (1).jpeg" alt="야구잠바를 입은 학생들"></div>
+                <div class="slide"><video src="IMG_1591.mov" autoplay muted loop playsinline></video></div>
+                <div class="slide"><video src="IMG_1062.MOV" autoplay muted loop playsinline></video></div>
+            </div>
+            <button class="slider-btn right-btn" onclick="moveSlide(1, event)">&#10095;</button>
+        </section>
+
+        <div class="slider-gap"></div>
+
+        <section class="map-section" id="map-section-anchor">
+            <div class="image-container">
+                <img id="map-img" src="map.png" alt="이화여고 캠퍼스 지도">
+                <canvas id="route-canvas"></canvas>
+                
+                <div class="map-pin" style="top: 13%; left: 69%; width: 6%; height: 8%;" onclick="showDetail(1)" title="1. 이화 박물관"></div>
+                <div class="map-pin" style="top: 13%; left: 56%; width: 6%; height: 8%;" onclick="showDetail(2)" title="2. 이화 백주년기념관"></div>
+                <div class="map-pin" style="top: 31%; left: 67%; width: 6%; height: 8%;" onclick="showDetail(3)" title="3. 본관"></div>
+                <div class="map-pin" style="top: 34%; left: 84%; width: 6%; height: 8%;" onclick="showDetail(4)" title="4. 유관순 우물터"></div>
+                <div class="map-pin" style="top: 58%; left: 60%; width: 6%; height: 8%;" onclick="showDetail(5)" title="5. 노천극장"></div>
+                <div class="map-pin" style="top: 82%; left: 47%; width: 6%; height: 8%;" onclick="showDetail(6)" title="6. 유관순 기념관"></div>
+                <div class="map-pin" style="top: 88%; left: 28%; width: 6%; height: 8%;" onclick="showDetail(7)" title="7. 체육관"></div>
+                <div class="map-pin" style="top: 88%; left: 38%; width: 6%; height: 8%;" onclick="showDetail(8)" title="8. 이화교회"></div>
+                <div class="map-pin" style="top: 88%; left: 65%; width: 6%; height: 8%;" onclick="showDetail(9)" title="9. 기숙사"></div>
+                <div class="map-pin" style="top: 64%; left: 24%; width: 6%; height: 8%;" onclick="showDetail(10)" title="10. 대운동장"></div>
+                <div class="map-pin" style="top: 37%; left: 33%; width: 5%; height: 7%;" onclick="showDetail(11)" title="11. 도서관"></div>
+            </div>
+        </section>
+    </div>
+
+    <div id="detail-view">
+        <h2 id="detail-title">장소 이름</h2>
+        <div id="detail-img-container"></div>
+        <div id="detail-desc">장소에 대한 설명이 이곳에 표시됩니다.</div>
+        <br>
+        <button class="back-btn" onclick="showHome(false)">← 지도로 돌아가기</button>
+    </div>
+
+    <script>
+        // --- 캠퍼스 건물 데이터 정보 ---
+        const placeData = {
+            1: { title: "1. 이화 박물관(심슨 기념관)", img: ["ewha-1.jpg"], desc: "1915년에 건립되어 교내에서 가장 오래된 건물입니다.<br>붉은 벽돌로 지어진 서양식 근대 건축물로 등록문화재 제3호로 지정되어 있습니다.<br>현재는 이화의 역사와 유관순 열사의 옛 교실 등을 복원해 전시하는 박물관으로 사용 중입니다." },
+            2: { title: "2. 이화 백주년기념관", img: ["ewha-2.jpg"], desc: "2004년에 건립된 복합 문화 예술 공간입니다. 현대적인 건축물 내에 미술 전시관과 공연장 등을 갖추고 있어 교내 행사는 물론 외부의 다양한 문화 행사도 열리는 곳입니다.<br><div class='floor-plan'><strong>[층별 안내]</strong><br>5층> 예절실, 지능형과학실, 컴퓨터실, 미술작업실, 종교과실 🚹<br>4층> 생물 실험실, 화학 실험실, 물리 실험실, 지구과학실험실, 교사공동연구실 🚹🚺<br>3층> 프라이홀, ESC, PASCH, 시청각실, 본관연결통로<br>2층> 화암홀(2층), 기도실, 공연연습실, 음악 연습실12345, 어학실습실, 모임방 🚹🚺<br>1층> 화암홀, 음악실1, 이화카페 🚹🚺<br>B1> 이화아트갤러리, 무대 대기실, 무대입구, 분장실(여, 남), 전기실, 사무실 🚹🚺<br>B2> 무대리프트, 휴게실 🅿️<br>B3> 공조실, 저수조, 기계실, 발전기실 🅿️</div>" },
+            3: { title: "3. 본관(화암신봉조관)", img: ["ewha-3.jpg"], desc: "1970년에 완공된 7층 규모의 건물로 현재 교무실, 교실, 학생식당 등이 자리한 학교의 중심 시설입니다. 이화학당의 발전에 크게 기여한 화암 신봉조 선생의 이름을 땄습니다.<br><div class='floor-plan'><strong>[층별 안내]</strong><br>8층> 교직원식당<br>7층> 학생식당<br>6층> 교실<br>5층> 교실<br>4층> 교실(+지리과실)<br>3층> 교실(+교목실/종교상담실)<br>2층> 교무실, 교장실, 방송실<br>1층> 학생회실, 사회과실, 상담실, 보건실, 라온담소, 행정실, 로비<br>0.5층> 동아리연합회실, 음악실<br>B1> 매점<br><br><small>* B1층은 동문 기준 1층에 해당합니다.</small></div>" },
+            4: { title: "4. 유관순 우물터", img: ["ewha-4.jpg"], desc: "이화학당 시절 유관순 열사가 직접 빨래를 했던 우물터가 원형에 가깝게 보존되어 있습니다.<br>당시 기숙사 학생들의 생활상을 짐작할 수 있는 뭉클한 역사적 흔적입니다." },
+            5: { title: "5. 노천극장", img: ["ewha-5.jpg"], desc: "고대 로마 원형 극장 양식으로 지어진 야외 무대입니다.<br>과거 수학 교사의 설계로 학생들이 직접 돌을 날라 만들었다고 전해지며, 개교기념식이나 야외 횃불예배 등 상징적인 행사들이 열립니다." },
+            6: { title: "6. 유관순 기념관", img: ["ewha-6(1).jpg", "ewha-6(2).jpg"], desc: "대규모 인원을 수용할 수 있는 대강당입니다.<br>평소 학생들의 채플(예배) 장소로 쓰이며, 매년 유관순상 시상식과 학교의 굵직한 주요 행사들이 이곳에서 진행됩니다. 학교 축제나 매주 수요일 예배가 이곳에서 진행됩니다." },
+            7: { title: "7. 체육관(백상규 기념관)", img: ["ewha-7.jpg"], desc: "이화학원 3대 이사장이었던 백상규 선생을 기념하여 명명된 체육 시설입니다.<br>내부에는 일반 체육관 시설뿐만 아니라 무용실, 골프 연습실 등이 갖춰져 있습니다.<br><div class='floor-plan'><strong>[주요 시설]</strong><br>무용실, 체력단련실, 실내 체육관, 실내 골프장</div>" },
+            8: { title: "8. 이화교회", img: ["ewha-8.jpg"], desc: "기독교(감리교) 정신을 바탕으로 세워진 이화의 신앙적 뿌리를 상징하는 교내 교회입니다.<br>동창회관 및 장학재단과 함께 위치해 학생과 동문들의 영적 구심점 역할을 합니다." },
+            9: { title: "9. 이화학사 김점동관(기숙사)", img: ["ewha-9.jpg"], desc: "2013년에 완공된 약 450명 수용 규모의 현대식 기숙사입니다.<br>한국 최초의 여성 의사이자 이화학당 출신인 '김점동(박에스더)'의 이름을 따서 명명되었습니다.<br><div class='floor-plan'><strong>[층별 안내]</strong><br>2~7층> 기도실, 휴게실, 보건실(2층)<br>1층> 다목적실, 토론방, 자율학습실, 휴게실<br>B1> 자율학습실</div>" },
+            10: { title: "10. 대운동장", img: ["ewha-10.jpg"], desc: "캠퍼스 중앙에 자리한 넓은 운동장입니다.<br>주변의 아름다운 나무와 잔디밭 조경이 어우러져 학생들의 체육 수업과 쉼터로 활용됩니다. 학교 체육대회나 주차장으로 사용되기도 합니다. 이화외고 학생들과 함께 사용됩니다." },
+            11: { title: "11. 도서관(전인항 기념 도서관)", img: ["ewha-11.jpg"], desc: "1986년 개교 100주년을 기념하여 준공된 도서관입니다.<br>학생들의 학업과 독서 활동을 지원하는 교육의 핵심 공간입니다.<br><div class='floor-plan'><strong>[층별 안내]</strong><br>3층> 자율학습실, 평화방, 도담방<br>2층> 누리터(자료열람실)<br>1층> 학교법인사무실</div>" }
+        };
+
+        const points = {
+            p1: { x: 0.69, y: 0.13 }, p2: { x: 0.56, y: 0.13 }, p3: { x: 0.67, y: 0.31 },
+            p4: { x: 0.84, y: 0.34 }, p5: { x: 0.60, y: 0.58 }, p6: { x: 0.47, y: 0.82 },
+            p7: { x: 0.28, y: 0.88 }, p8: { x: 0.38, y: 0.88 }, p9: { x: 0.65, y: 0.88 },
+            p10: { x: 0.24, y: 0.64 }, p11: { x: 0.33, y: 0.37 }
+        };
+
+        // --- 상태 및 화면전환 로직 ---
+        const homeView = document.getElementById('home-view');
+        const detailView = document.getElementById('detail-view');
+        
+        let currentIndex = 0;
+        const slides = document.querySelectorAll('.slide');
+        const totalSlides = slides.length;
+        const sliderWrapper = document.getElementById('sliderWrapper');
+        const introText = document.getElementById('introText');
+
+        // 홈 화면 표시 제어 (isReset 변수가 true면 맨 위 스크롤 및 슬라이더 초기화, false면 지도로 포커스 이동)
+        function showHome(isReset) {
+            homeView.style.display = 'block';
+            detailView.style.display = 'none';
+            
+            if (isReset) {
+                currentIndex = 0;
+                sliderWrapper.style.transform = `translateX(0%)`;
+                introText.classList.remove('animate');
+                void introText.offsetWidth; 
+                introText.classList.add('animate');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+                // 상세페이지에서 돌아올 때는 지도가 위치한 구역으로 바로 스크롤 다운
+                const anchor = document.getElementById('map-section-anchor');
+                if(anchor) {
+                    anchor.scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+            // 캔버스 크기 재배정 동기화
+            const startVal = document.getElementById('start-select').value;
+            const endVal = document.getElementById('end-select').value;
+            if (startVal && endVal) setTimeout(drawPoints, 200);
+        }
+
+        // 특정 건물 상세 페이지 오픈
+        function showDetail(id) {
+            const data = placeData[id];
+            document.getElementById('detail-title').innerText = data.title;
+            document.getElementById('detail-desc').innerHTML = data.desc; 
+
+            const imgContainer = document.getElementById('detail-img-container');
+            imgContainer.innerHTML = "";
+            
+            if (data.img && data.img.length > 0) {
+                if (data.img.length === 1) {
+                    const imgTag = document.createElement('img');
+                    imgTag.src = data.img[0];
+                    imgTag.alt = data.title;
+                    imgTag.className = 'detail-img';
+                    imgContainer.appendChild(imgTag);
+                } else {
+                    const flexDiv = document.createElement('div');
+                    flexDiv.className = 'img-flex-container';
+                    data.img.forEach(src => {
+                        const imgTag = document.createElement('img');
+                        imgTag.src = src;
+                        imgTag.alt = data.title;
+                        imgTag.className = 'detail-img';
+                        flexDiv.appendChild(imgTag);
+                    });
+                    imgContainer.appendChild(flexDiv);
+                }
+            }
+
+            homeView.style.display = 'none';
+            detailView.style.display = 'block';
+            window.scrollTo(0, 0);
+        }
+
+        // --- 슬라이더 컨트롤 ---
+        slides.forEach(slide => {
+            slide.addEventListener('click', () => { showHome(true); });
+        });
+
+        function moveSlide(direction, event) {
+            if (event) event.stopPropagation(); 
+            currentIndex = (currentIndex + direction + totalSlides) % totalSlides;
+            sliderWrapper.style.transform = `translateX(-${currentIndex * 100}%)`;
+
+            if (currentIndex === 0) {
+                introText.classList.remove('animate');
+                void introText.offsetWidth; 
+                introText.classList.add('animate');
+            }
+        }
+
+        // --- 지도 노선 점 그리기 모듈 ---
+        function drawPoints() {
+            // 상세페이지를 보던 도중 상단바에서 검색하면 홈 지도로 강제 리포커싱
+            if(homeView.style.display === 'none') {
+                homeView.style.display = 'block';
+                detailView.style.display = 'none';
+            }
+
+            const startVal = document.getElementById('start-select').value;
+            const endVal = document.getElementById('end-select').value;
+
+            if (!startVal || !endVal) {
+                alert("출발위치와 도착위치를 모두 선택해주세요.");
+                return;
+            }
+            if (startVal === endVal) {
+                alert("출발지와 도착지가 같습니다!");
+                return;
+            }
+
+            const canvas = document.getElementById('route-canvas');
+            const ctx = canvas.getContext('2d');
+            const img = document.getElementById('map-img');
+
+            canvas.width = img.clientWidth;
+            canvas.height = img.clientHeight;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const startPt = points[startVal];
+            const endPt = points[endVal];
+
+            // 1. 출발지점 (빨간 원 노드)
+            ctx.beginPath();
+            ctx.arc(startPt.x * canvas.width, startPt.y * canvas.height, 12, 0, 2 * Math.PI);
+            ctx.fillStyle = "#E54B4B";
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 3;
+            ctx.fill();
+            ctx.stroke();
+
+            // 2. 도착지점 (빨간 원 노드)
+            ctx.beginPath();
+            ctx.arc(endPt.x * canvas.width, endPt.y * canvas.height, 12, 0, 2 * Math.PI);
+            ctx.fillStyle = "#E54B4B";
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 3;
+            ctx.fill();
+            ctx.stroke();
+
+            // 검색이 완료되면 지도가 보이게 스크롤 자동 이동
+            document.getElementById('map-section-anchor').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 해상도 조절 반응형 이벤트
+        window.addEventListener('resize', () => {
+            const startVal = document.getElementById('start-select').value;
+            const endVal = document.getElementById('end-select').value;
+            if (startVal && endVal && homeView.style.display === 'block') {
+                drawPoints();
+            }
+        });
+    </script>
+</body>
+</html>
